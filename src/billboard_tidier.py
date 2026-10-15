@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 class BillboardTidier:
@@ -20,16 +21,24 @@ class BillboardTidier:
     def load_data(self):
         """
         Load the raw Billboard dataset from a local relative path.
+        Falls back to unicode_escape encoding if UTF-8 loading fails.
         """
         if not self.file_path.exists():
             raise FileNotFoundError(
                 f"Billboard dataset not found: {self.file_path}"
             )
 
-        self.data = pd.read_csv(self.file_path)
+        try:
+            self.data = pd.read_csv(self.file_path)
+        except UnicodeDecodeError:
+            self.data = pd.read_csv(
+                self.file_path,
+                encoding="unicode_escape"
+            )
 
         return self.data
 
+    
     def validate_schema(self):
         """
         Validate the required identifier columns and weekly ranking columns.
@@ -236,4 +245,97 @@ class BillboardTidier:
 
         return self.cleaned_data, summary
 
-    
+    def add_chart_dates(self):
+        """
+        Convert the Billboard entry date to datetime and calculate the
+        corresponding chart date for each weekly ranking observation.
+
+        Formula:
+            Chart_Date = Entry_Date + (Week_Number - 1) * 7 days
+
+        Week 1 therefore corresponds to the original entry date.
+        """
+        if self.cleaned_data is None:
+            raise ValueError(
+                "Cleaned ranking data is unavailable. "
+                "Call clean_rankings() first."
+            )
+
+        dated = self.cleaned_data.copy()
+
+        # Convert the original entry-date string to a datetime value
+        dated["Entry_Date"] = pd.to_datetime(
+            dated["date.entered"],
+            errors="coerce"
+        )
+
+        # Calculate the date corresponding to each weekly ranking
+        dated["Chart_Date"] = (
+            dated["Entry_Date"]
+            + pd.to_timedelta(
+                (dated["Week_Number"] - 1) * 7,
+                unit="D"
+            )
+        )
+
+        self.cleaned_data = dated
+
+        return self.cleaned_data
+
+    def get_song_trend(self, artist, track):
+        """
+        Return the weekly Billboard ranking history for a selected song.
+        """
+        if self.cleaned_data is None:
+            raise ValueError(
+                "Cleaned Billboard data is unavailable. "
+                "Complete the preprocessing steps first."
+            )
+
+        song_data = self.cleaned_data[
+            (self.cleaned_data["artist"] == artist)
+            & (self.cleaned_data["track"] == track)
+        ].copy()
+
+        if song_data.empty:
+            raise ValueError(
+                f"No data found for artist='{artist}' and track='{track}'."
+            )
+
+        return song_data.sort_values("Week_Number")
+
+
+    def plot_song_trend(self, artist, track):
+        """
+        Plot the Billboard ranking trend for a selected song.
+
+        The y-axis is inverted because rank 1 is the best position.
+        """
+        song_data = self.get_song_trend(
+            artist,
+            track
+        )
+
+        plt.figure(figsize=(10, 6))
+
+        plt.plot(
+            song_data["Week_Number"],
+            song_data["Rank"],
+            marker="o"
+        )
+
+        # Billboard rank 1 is the best possible position
+        upper_limit = min(100, int(song_data["Rank"].max()) + 5)
+        plt.ylim(upper_limit, 1)
+
+        plt.title(
+            f"Billboard Ranking Trend: {artist} - {track}"
+        )
+        plt.xlabel("Week Number")
+        plt.ylabel("Billboard Rank")
+
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+
+        return song_data
