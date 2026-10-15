@@ -19,3 +19,6 @@ __pycache__/
 # Operating system
 .DS_Store
 Thumbs.db
+
+requirements.txt
+data/Pew_Religious_dataset .csv
