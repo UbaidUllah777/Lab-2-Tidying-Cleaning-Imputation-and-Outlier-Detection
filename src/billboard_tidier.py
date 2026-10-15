@@ -12,6 +12,7 @@ class BillboardTidier:
     def __init__(self, file_path):
         self.file_path = Path(file_path)
         self.data = None
+        self.long_data = None
         self.id_columns = []
         self.week_columns = []
 
@@ -94,3 +95,29 @@ class BillboardTidier:
             "missing_values": self.data.isna().sum(),
             "duplicate_rows": self.data.duplicated().sum()
         }
+
+    def reshape_data(self):
+        """
+        Reshape the Billboard dataset from wide format to long/tidy format.
+
+        The weekly ranking columns (wk1 to wk76) are converted into:
+        - Week: the original weekly column label
+        - Rank: the Billboard ranking value
+        """
+        if self.data is None:
+            raise ValueError(
+                "Dataset has not been loaded. Call load_data() first."
+            )
+
+        # Ensure identifier and week columns have been identified
+        if not self.id_columns or not self.week_columns:
+            self.validate_schema()
+
+        self.long_data = self.data.melt(
+            id_vars=self.id_columns,
+            value_vars=self.week_columns,
+            var_name="Week",
+            value_name="Rank"
+        )
+
+        return self.long_data
